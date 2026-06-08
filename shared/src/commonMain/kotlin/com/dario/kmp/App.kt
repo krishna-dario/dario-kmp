@@ -1,72 +1,52 @@
 package com.dario.kmp
 
-import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.safeContentPadding
 import androidx.compose.material3.Button
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
-import androidx.compose.runtime.*
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.tooling.preview.Preview
-import com.dario.kmp.discover.di.DiscoverModule
-import com.dario.kmp.discover.domain.model.ItemType
-import com.dario.kmp.discover.feature.itemdetail.ui.ItemDetailRoute
-import dariokmp.shared.generated.resources.Res
-import dariokmp.shared.generated.resources.compose_multiplatform
-import org.jetbrains.compose.resources.painterResource
+import com.dario.kmp.feature.discover.di.DiscoverModule
+import com.dario.kmp.feature.discover.domain.model.ItemType
+import com.dario.kmp.feature.discover.ui.ItemDetailScreen
 
+/**
+ * Demo entry point used by the [androidApp] and [iosApp] shells in this project.
+ * The real Android and iOS host apps embed [ItemDetailScreen] directly via
+ * [DiscoverModule.provideViewModel].
+ */
 @Composable
-@Preview
 fun App() {
-    MaterialTheme {
-        var showDiscover by remember { mutableStateOf(false) }
-        var discoverType by remember { mutableStateOf(ItemType.RECIPE) }
+    var currentType: ItemType? by remember { mutableStateOf(null) }
+    val viewModel = remember { DiscoverModule.provideViewModel(baseUrl = "https://api.example.com/") }
 
-        if (showDiscover) {
-            // Example: launch the Discover item-detail screen cross-platform.
-            // Replace the baseUrl with your real CMS endpoint.
-            val viewModel = remember {
-                DiscoverModule.provideItemDetailViewModel(baseUrl = "https://api.example.com/")
-            }
-            ItemDetailRoute(
-                viewModel = viewModel,
-                itemType = discoverType,
-                onClose = { showDiscover = false }
-            )
-        } else {
-            Column(
-                modifier = Modifier
-                    .background(MaterialTheme.colorScheme.primaryContainer)
-                    .safeContentPadding()
-                    .fillMaxSize(),
-                horizontalAlignment = Alignment.CenterHorizontally,
-            ) {
-                Button(onClick = { discoverType = ItemType.RECIPE; showDiscover = true }) {
-                    Text("Open Recipe Detail")
-                }
-                Button(onClick = { discoverType = ItemType.ARTICLE; showDiscover = true }) {
-                    Text("Open Article Detail")
-                }
-                Button(onClick = { discoverType = ItemType.AUDIO; showDiscover = true }) {
-                    Text("Open Audio Detail")
-                }
-                AnimatedVisibility(true) {
-                    val greeting = remember { Greeting().greet() }
-                    Column(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalAlignment = Alignment.CenterHorizontally,
-                    ) {
-                        Image(painterResource(Res.drawable.compose_multiplatform), null)
-                        Text("Compose: $greeting")
-                    }
-                }
-            }
+    if (currentType != null) {
+        ItemDetailScreen(
+            viewModel = viewModel,
+            itemType = currentType!!,
+            onClose = { currentType = null },
+        )
+    } else {
+        Column(
+            modifier = Modifier
+                .background(MaterialTheme.colorScheme.primaryContainer)
+                .safeContentPadding()
+                .fillMaxSize(),
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.Center,
+        ) {
+            Button(onClick = { currentType = ItemType.RECIPE }) { Text("Open Recipe") }
+            Button(onClick = { currentType = ItemType.ARTICLE }) { Text("Open Article") }
+            Button(onClick = { currentType = ItemType.AUDIO }) { Text("Open Audio") }
         }
     }
 }
