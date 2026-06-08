@@ -6,9 +6,9 @@ import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
-import com.dario.kmp.discover.di.DiscoverModule
-import com.dario.kmp.discover.domain.model.ItemType
-import com.dario.kmp.discover.feature.itemdetail.ui.ItemDetailRoute
+import com.dario.kmp.feature.discover.di.DiscoverModule
+import com.dario.kmp.feature.discover.domain.model.ItemType
+import com.dario.kmp.feature.discover.ui.ItemDetailScreen
 
 /**
  * Android entry point for the KMP Discover item-detail screen.
@@ -33,12 +33,12 @@ class DiscoverItemDetailActivity : ComponentActivity() {
             ?: ItemType.RECIPE
 
         // Replace with your real base URL (or inject via BuildConfig / DI).
-        val viewModel = DiscoverModule.provideItemDetailViewModel(
+        val viewModel = DiscoverModule.provideViewModel(
             baseUrl = BASE_URL
         )
 
         setContent {
-            ItemDetailRoute(
+            ItemDetailScreen(
                 viewModel = viewModel,
                 itemType = type,
                 onClose = ::finish
