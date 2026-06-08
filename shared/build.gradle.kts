@@ -116,3 +116,16 @@ compose.resources {
 dependencies {
     androidRuntimeClasspath(libs.compose.uiTooling)
 }
+
+publishing {
+    repositories {
+        maven {
+            name = "GitHubPackages"
+            url = uri("https://maven.pkg.github.com/krishna-dario/dario-kmp")
+            credentials {
+                username = System.getenv("GITHUB_ACTOR") ?: project.findProperty("gp_user") as String?
+                password = System.getenv("GITHUB_TOKEN") ?: project.findProperty("gp_token") as String?
+            }
+        }
+    }
+}
