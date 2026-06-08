@@ -484,14 +484,18 @@ The workflow is **manual trigger only** — no automatic builds on push or PR.
 
 ### Jobs
 
-| Target    | Runner         | Output                                         | Retention |
-|-----------|---------------|------------------------------------------------|-----------|
-| `ios`     | `macos-latest` | `Shared.xcframework` as workflow artifact      | 14 days   |
-| `android` | `ubuntu-latest`| AAR files as workflow artifact                 | 14 days   |
-| `both`    | Both runners   | Both outputs in parallel                       | 14 days   |
-| `publish` | `macos-latest` | Publishes `com.dario.kmp:shared` to GitHub Packages | —    |
+| Target    | Runner         | What it does                                              |
+|-----------|---------------|-----------------------------------------------------------|
+| `ios`     | `macos-latest` | Builds `Shared.xcframework`, uploads as artifact (14 days) |
+| `verify`  | `ubuntu-latest`| Compiles Android target — confirms code is healthy (no AAR output) |
+| `publish` | `macos-latest` | Builds full KMP publication → pushes to GitHub Packages   |
 
-Download artifacts from the **Summary** page of the completed workflow run.
+> **Why no standalone Android AAR target?**
+> KMP does not expose an `assembleDebug`/`assembleAndroidDebug` task for the Android library.
+> The Android artifact (AAR + POM with transitive deps) is only produced through the Gradle
+> publish pipeline. Use `publish` to push to GitHub Packages, or `publishToMavenLocal` locally.
+
+Download XCFramework artifacts from the **Summary** page of the completed workflow run.
 
 ---
 
