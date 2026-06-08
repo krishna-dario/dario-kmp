@@ -1,42 +1,160 @@
-This is a Kotlin Multiplatform project targeting Android, iOS, Web.
+# DarioKMP — Kotlin Multiplatform Shared Module
 
-* [/iosApp](./iosApp/iosApp) contains an iOS application. Even if you’re sharing your UI with Compose Multiplatform,
-  you need this entry point for your iOS app. This is also where you should add SwiftUI code for your project.
-
-* [/shared](./shared/src) is for code that will be shared across your Compose Multiplatform applications.
-  It contains several subfolders:
-  - [commonMain](./shared/src/commonMain/kotlin) is for code that’s common for all targets.
-  - Other folders are for Kotlin code that will be compiled for only the platform indicated in the folder name.
-    For example, if you want to use Apple’s CoreCrypto for the iOS part of your Kotlin app,
-    the [iosMain](./shared/src/iosMain/kotlin) folder would be the right place for such calls.
-    Similarly, if you want to edit the Desktop (JVM) specific part, the [jvmMain](./shared/src/jvmMain/kotlin)
-    folder is the appropriate location.
-
-### Running the apps
-
-Use the run configurations provided by the run widget in your IDE's toolbar. You can also use these commands and options:
-
-- Android app: `./gradlew :androidApp:assembleDebug`
-- Web app:
-  - Wasm target (faster, modern browsers): `./gradlew :webApp:wasmJsBrowserDevelopmentRun`
-  - JS target (slower, supports older browsers): `./gradlew :webApp:jsBrowserDevelopmentRun`
-- iOS app: open the [/iosApp](./iosApp) directory in Xcode and run it from there.
-
-### Running tests
-
-Use the run button in your IDE's editor gutter, or run tests using Gradle tasks:
-
-- Android tests: `./gradlew :shared:testAndroidHostTest`
-- Web tests:
-  - Wasm target: `./gradlew :shared:wasmJsTest`
-  - JS target: `./gradlew :shared:jsTest`
-- iOS tests: `./gradlew :shared:iosSimulatorArm64Test`
+Shared KMP module used by the Dario Android app and iOS app. Built with Compose Multiplatform,
+Ktor, and kotlinx.serialization. Targets Android and iOS.
 
 ---
 
-Learn more about [Kotlin Multiplatform](https://www.jetbrains.com/help/kotlin-multiplatform-dev/get-started.html),
-[Compose Multiplatform](https://github.com/JetBrains/compose-multiplatform/#compose-multiplatform),
-[Kotlin/Wasm](https://kotl.in/wasm/)…
+## Project Structure
 
-We would appreciate your feedback on Compose/Web and Kotlin/Wasm in the public Slack channel [#compose-web](https://slack-chats.kotlinlang.org/c/compose-web).
-If you face any issues, please report them on [YouTrack](https://youtrack.jetbrains.com/newIssue?project=CMP).# dario-kmp
+```
+shared/src/
+├── commonMain/kotlin/com/dario/kmp/
+│   ├── App.kt                          # Demo entry point (dev only)
+│   ├── core/
+│   │   └── network/
+│   │       └── KtorClientFactory.kt   # Shared Ktor HTTP client
+│   └── feature/
+│       └── discover/
+│           ├── data/
+│           │   ├── datasource/        # Remote data source
+│           │   ├── local/             # Demo/mock data source
+│           │   ├── remote/api/        # Ktor API client
+│           │   ├── remote/dto/        # Response models + mappers
+│           │   └── repository/        # DiscoverRepositoryImpl
+│           ├── di/
+│           │   └── DiscoverModule.kt  # Manual DI (no Hilt/Koin)
+│           ├── domain/
+│           │   ├── model/             # DetailContent, ItemType, etc.
+│           │   ├── repository/        # DiscoverRepository interface
+│           │   └── usecase/           # GetItemDetailUseCase
+│           ├── presentation/
+│           │   ├── ItemDetailViewModel.kt
+│           │   ├── ItemDetailUiState.kt
+│           │   ├── ItemDetailUiEvent.kt
+│           │   └── ItemDetailSideEffect.kt
+│           ├── theme/                 # DiscoverTheme, colors, typography
+│           └── ui/
+│               ├── ItemDetailScreen.kt
+│               └── components/        # RecipeContent, ArticleContent, AudioContent
+└── iosMain/kotlin/com/dario/kmp/
+    └── feature/discover/
+        └── DiscoverViewController.kt  # UIViewController bridge for Swift
+```
+
+---
+
+## Tech Stack
+
+| Layer         | Library                         | Version |
+|--------------|---------------------------------|---------|
+| Language      | Kotlin Multiplatform            | 2.4.0   |
+| UI            | Compose Multiplatform           | 1.11.1  |
+| Networking    | Ktor Client                     | 3.1.3   |
+| Serialization | kotlinx.serialization           | 2.0.0   |
+| Images        | Coil3                           | 3.1.0   |
+| ViewModel     | lifecycle-viewmodel (KMP)       | 2.9.0   |
+| Build         | AGP                             | 9.2.1   |
+
+---
+
+## Android Integration
+
+The shared module is published to Maven Local and consumed by the Android app.
+
+**Publish to Maven Local** (must run on macOS — Kotlin/Native requires macOS host):
+
+```bash
+cd ~/AndroidStudioProjects/DarioKMP
+./gradlew :shared:publishToMavenLocal
+```
+
+Then sync the Android project. The Android app consumes it via:
+
+```groovy
+// app/build.gradle
+implementation 'com.dario.kmp:shared:1.0.0'
+```
+
+**Android entry point:**
+
+```kotlin
+// Launch the KMP Discover screen from any Android context
+DiscoverKmpActivity.launch(context, ItemType.RECIPE)
+```
+
+---
+
+## iOS Integration
+
+The iOS framework is built as an XCFramework and consumed by the native iOS app.
+
+**Build locally** (requires macOS + Xcode):
+
+```bash
+# Debug
+./gradlew :shared:assembleSharedDebugXCFramework
+
+# Release
+./gradlew :shared:assembleSharedReleaseXCFramework
+```
+
+Output: `shared/build/XCFrameworks/{debug|release}/Shared.xcframework`
+
+**Swift usage:**
+
+```swift
+let vc = DiscoverViewControllerKt.DiscoverViewController(
+    type: "RECIPE",
+    baseUrl: "https://your-cms.example.com/",
+    onClose: { self.dismiss(animated: true) }
+)
+present(vc, animated: true)
+```
+
+---
+
+## CI/CD — GitHub Actions
+
+The workflow is **manual trigger only** — no automatic builds on push or PR.
+
+**How to trigger:** GitHub → `Actions` tab → `Build DarioKMP` → `Run workflow`
+
+### Inputs
+
+| Input        | Options                      | Description       |
+|-------------|------------------------------|-------------------|
+| `target`    | `ios` / `android` / `both`   | What to build     |
+| `build_type`| `debug` / `release`          | Build variant     |
+
+### Jobs
+
+**iOS** — runs on `macos-latest` (Xcode pre-installed)
+- Builds `Shared.xcframework` (debug or release)
+- Uploads as workflow artifact with 14-day retention
+
+**Android** — runs on `ubuntu-latest`
+- Builds `shared-{debug|release}.aar`
+- Uploads as workflow artifact with 14-day retention
+
+Download artifacts from the **Summary** page of the completed workflow run.
+
+---
+
+## Local Development
+
+**Requirements:** JDK 17, Android Studio Narwhal or later, macOS for iOS/publish tasks.
+
+```bash
+# Verify Android compilation
+./gradlew :shared:compileKotlinAndroid
+
+# Build Android AAR
+./gradlew :shared:assembleDebug
+
+# Build iOS XCFramework (macOS only)
+./gradlew :shared:assembleSharedDebugXCFramework
+
+# Publish to Maven Local (macOS only)
+./gradlew :shared:publishToMavenLocal
+```

@@ -1,0 +1,95 @@
+name: Build DarioKMP
+
+on:
+  workflow_dispatch:
+    inputs:
+      target:
+        description: "What to build"
+        required: true
+        default: "both"
+        type: choice
+        options:
+          - ios
+          - android
+          - both
+      build_type:
+        description: "Build type"
+        required: true
+        default: "debug"
+        type: choice
+        options:
+          - debug
+          - release
+
+jobs:
+  # ─── iOS XCFramework ────────────────────────────────────────────────────────
+  build-ios:
+    name: Build iOS XCFramework (${{ github.event.inputs.build_type }})
+    if: ${{ github.event.inputs.target == 'ios' || github.event.inputs.target == 'both' }}
+    runs-on: macos-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          java-version: '17'
+          distribution: 'temurin'
+
+      - name: Setup Gradle
+        uses: gradle/actions/setup-gradle@v3
+
+      - name: Make gradlew executable
+        run: chmod +x gradlew
+
+      - name: Build ${{ github.event.inputs.build_type }} XCFramework
+        run: |
+          if [ "${{ github.event.inputs.build_type }}" == "release" ]; then
+            ./gradlew :shared:assembleSharedReleaseXCFramework
+          else
+            ./gradlew :shared:assembleSharedDebugXCFramework
+          fi
+
+      - name: Upload XCFramework
+        uses: actions/upload-artifact@v4
+        with:
+          name: Shared-XCFramework-${{ github.event.inputs.build_type }}
+          path: shared/build/XCFrameworks/${{ github.event.inputs.build_type }}/Shared.xcframework
+          retention-days: 14
+
+  # ─── Android AAR ────────────────────────────────────────────────────────────
+  build-android:
+    name: Build Android AAR (${{ github.event.inputs.build_type }})
+    if: ${{ github.event.inputs.target == 'android' || github.event.inputs.target == 'both' }}
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          java-version: '17'
+          distribution: 'temurin'
+
+      - name: Setup Gradle
+        uses: gradle/actions/setup-gradle@v3
+
+      - name: Make gradlew executable
+        run: chmod +x gradlew
+
+      - name: Build ${{ github.event.inputs.build_type }} AAR
+        run: |
+          if [ "${{ github.event.inputs.build_type }}" == "release" ]; then
+            ./gradlew :shared:assembleRelease
+          else
+            ./gradlew :shared:assembleDebug
+          fi
+
+      - name: Upload AAR
+        uses: actions/upload-artifact@v4
+        with:
+          name: Shared-AAR-${{ github.event.inputs.build_type }}
+          path: shared/build/outputs/aar/shared-${{ github.event.inputs.build_type }}.aar
+          retention-days: 14
