@@ -2,7 +2,17 @@ name: Build DarioKMP
 
 # Manual trigger only — no automatic builds on push/PR.
 # iOS XCFramework and Android/RN publish are separate targets.
-# macos-latest = macOS 15, Apple Silicon (M1), 7GB RAM, 3 CPUs.
+#
+# Runners:
+#   build-ios : macos-latest  — macOS 15, Apple Silicon (M1), 7GB RAM, 3 CPUs
+#               Required for Xcode toolchain (XCFramework linking).
+#   publish   : ubuntu-latest — Ubuntu 22.04, 16GB RAM, 4 CPUs, 2-3× faster provisioning.
+#               Publishing KMP klibs + Android AAR to Maven does NOT need macOS.
+#               KMP klibs are Kotlin IR — cross-compiled on Linux, no Xcode linker needed.
+
+env:
+  # Force all JavaScript actions to use Node.js 24 (GitHub deadline: June 16 2026)
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
 
 on:
   workflow_dispatch:
@@ -47,8 +57,21 @@ jobs:
           java-version: '17'
           distribution: 'temurin'
 
+      # Cache Kotlin/Native toolchain (~500 MB).
+      # Without this it re-downloads on every run — saves 5-10 min.
+      # Key includes Kotlin version (via libs.versions.toml) so a version bump
+      # busts the cache and fetches the matching toolchain automatically.
+      - name: Cache Kotlin/Native toolchain
+        uses: actions/cache@v4
+        with:
+          path: ~/.konan
+          key: konan-${{ runner.os }}-${{ hashFiles('gradle/libs.versions.toml') }}
+          restore-keys: konan-${{ runner.os }}-
+
+      # Caches ~/.gradle (downloaded deps + Gradle home).
+      # Combined with --build-cache below, unchanged modules are not recompiled.
       - name: Setup Gradle
-        uses: gradle/actions/setup-gradle@v3
+        uses: gradle/actions/setup-gradle@v4
 
       - name: Make gradlew executable
         run: chmod +x gradlew
@@ -62,16 +85,17 @@ jobs:
           if [ "${{ github.event.inputs.build_type }}" == "release" ]; then
             ./gradlew :shared:assembleSharedReleaseXCFramework \
               -Pkotlin.native.parallelThreads=1 \
+              --build-cache \
               --no-daemon \
               --stacktrace
           else
             ./gradlew :shared:assembleSharedDebugXCFramework \
               -Pkotlin.native.parallelThreads=1 \
+              --build-cache \
               --no-daemon \
               --stacktrace
           fi
 
-      # Verify all 3 slices are present before uploading
       - name: Verify XCFramework slices
         run: |
           XCFW="shared/build/XCFrameworks/${{ github.event.inputs.build_type }}/Shared.xcframework"
@@ -93,7 +117,7 @@ jobs:
           done
 
           echo ""
-          echo "All 3 slices present. XCFramework is valid."
+          echo "All 2 slices present. XCFramework is valid."
 
       - name: Upload XCFramework
         uses: actions/upload-artifact@v4
@@ -124,10 +148,14 @@ jobs:
   # Android native + React Native Android consume com.dario.kmp:shared via Gradle.
   # debug → version 1.0.0-debug (development/testing)
   # release → version 1.0.0 (production)
+  #
+  # Runs on ubuntu-latest: 16GB RAM / 4 CPUs / faster provisioning vs macOS 7GB / 3 CPUs.
+  # KMP Maven publications (Android AAR + Kotlin/Native klibs) compile cross-platform —
+  # no Xcode linker needed. macOS is only required for XCFramework binary linking.
   publish:
     name: Publish to GitHub Packages (${{ github.event.inputs.build_type }})
     if: ${{ github.event.inputs.target == 'publish' }}
-    runs-on: macos-latest
+    runs-on: ubuntu-latest
 
     permissions:
       contents: read
@@ -142,24 +170,37 @@ jobs:
           java-version: '17'
           distribution: 'temurin'
 
+      # Cache Kotlin/Native toolchain — needed to compile iOS klibs (Kotlin IR, not native binary).
+      # Linux uses the x86_64 variant of the toolchain (~400 MB).
+      - name: Cache Kotlin/Native toolchain
+        uses: actions/cache@v4
+        with:
+          path: ~/.konan
+          key: konan-${{ runner.os }}-${{ hashFiles('gradle/libs.versions.toml') }}
+          restore-keys: konan-${{ runner.os }}-
+
       - name: Setup Gradle
-        uses: gradle/actions/setup-gradle@v3
+        uses: gradle/actions/setup-gradle@v4
 
       - name: Make gradlew executable
         run: chmod +x gradlew
 
       - name: Set version suffix for debug builds
         if: ${{ github.event.inputs.build_type == 'debug' }}
-        run: sed -i '' 's/^version = .*/version = "1.0.0-debug"/' shared/build.gradle.kts
+        # Note: Linux sed uses -i without trailing '' (macOS requires sed -i '')
+        run: sed -i 's/^version = .*/version = "1.0.0-debug"/' shared/build.gradle.kts
 
+      # ubuntu-latest has 16GB RAM — raise Kotlin daemon ceiling from 6GB (macOS cap) to 10GB.
+      # Gradle process itself is capped by org.gradle.jvmargs in gradle.properties (4GB).
       - name: Publish to GitHub Packages
         env:
-          GRADLE_OPTS: "-Dkotlin.daemon.jvmargs=-Xmx6144M -XX:+UseG1GC -XX:MaxMetaspaceSize=512M"
+          GRADLE_OPTS: "-Dkotlin.daemon.jvmargs=-Xmx10240M -XX:+UseG1GC -XX:MaxMetaspaceSize=512M"
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GITHUB_ACTOR: ${{ github.actor }}
         run: |
           ./gradlew :shared:publish \
-            -Pkotlin.native.parallelThreads=1 \
+            -Pkotlin.native.parallelThreads=2 \
+            --build-cache \
             --no-daemon \
             --stacktrace
 
