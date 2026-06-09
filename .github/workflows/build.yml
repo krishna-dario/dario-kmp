@@ -107,31 +107,20 @@ jobs:
           # Capitalize first letter: debug → Debug, release → Release
           BUILD_CAP="$(echo "$BUILD" | awk '{print toupper(substr($0,1,1)) substr($0,2)}')"
 
+          # Both modes use assembleSharedXCFramework.
+          # device-only: passes -PdeviceOnly so build.gradle.kts excludes iosSimulatorArm64.
+          # all:         no flag → both iosArm64 + iosSimulatorArm64 are compiled.
+          DEVICE_FLAG=""
           if [ "$SLICE" == "device-only" ]; then
-            # ── device-only ─────────────────────────────────────────────────
-            # Link iosArm64 framework only (physical device, arm64).
-            # Skips iosSimulatorArm64 compilation — ~30% faster.
-            ./gradlew :shared:linkShared${BUILD_CAP}FrameworkIosArm64 \
-              -Pkotlin.native.parallelThreads=1 \
-              --build-cache \
-              --no-daemon \
-              --stacktrace
-
-            # Wrap the .framework in an XCFramework — Xcode requires this format.
-            mkdir -p shared/build/XCFrameworks/${BUILD}
-            xcodebuild -create-xcframework \
-              -framework shared/build/bin/iosArm64/${BUILD}Framework/Shared.framework \
-              -output shared/build/XCFrameworks/${BUILD}/Shared.xcframework
-
-          else
-            # ── all (full XCFramework) ───────────────────────────────────────
-            # Two slices: iosArm64 (device) + iosSimulatorArm64 (Apple Silicon simulator).
-            ./gradlew :shared:assembleShared${BUILD_CAP}XCFramework \
-              -Pkotlin.native.parallelThreads=1 \
-              --build-cache \
-              --no-daemon \
-              --stacktrace
+            DEVICE_FLAG="-PdeviceOnly"
           fi
+
+          ./gradlew :shared:assembleShared${BUILD_CAP}XCFramework \
+            ${DEVICE_FLAG} \
+            -Pkotlin.native.parallelThreads=1 \
+            --build-cache \
+            --no-daemon \
+            --stacktrace
 
       - name: Verify XCFramework slices
         run: |

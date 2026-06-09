@@ -21,13 +21,20 @@ kotlin {
     applyDefaultHierarchyTemplate()
 
     val xcf = XCFramework("Shared")
-    listOf(
-        iosArm64(),           // physical iPhone/iPad
-        iosSimulatorArm64(),  // simulator on Apple Silicon Mac (M1/M2/M3)
-        // iosX64 intentionally excluded: Compose Multiplatform 1.11.x dropped iosX64 support.
-        // Intel Mac users: set EXCLUDED_ARCHS[sdk=iphonesimulator*] = x86_64 in Xcode build
-        // settings to run the iosSimulatorArm64 slice via Rosetta 2.
-    ).forEach { iosTarget ->
+
+    // Pass -PdeviceOnly on the Gradle command line to build only the iosArm64 slice.
+    // Used by CI when building for physical device / TestFlight / App Store (~30% faster).
+    // Without the flag both slices are built (iosArm64 + iosSimulatorArm64).
+    //
+    // iosX64 intentionally excluded: Compose Multiplatform 1.11.x dropped iosX64 support.
+    // Intel Mac users: set EXCLUDED_ARCHS[sdk=iphonesimulator*] = x86_64 in Xcode build
+    // settings to run the iosSimulatorArm64 slice via Rosetta 2.
+    val deviceOnly = project.hasProperty("deviceOnly")
+
+    buildList {
+        add(iosArm64())                             // physical iPhone/iPad — always included
+        if (!deviceOnly) add(iosSimulatorArm64())   // simulator — skipped when -PdeviceOnly
+    }.forEach { iosTarget ->
         iosTarget.binaries.framework {
             baseName = "Shared"
             isStatic = true
