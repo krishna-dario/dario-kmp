@@ -26,10 +26,11 @@ on:
 
 jobs:
   # ─── iOS XCFramework ────────────────────────────────────────────────────────
-  # Builds Shared.xcframework containing 3 slices:
+  # Builds Shared.xcframework containing 2 slices:
   #   - iosArm64          → physical iPhone/iPad
   #   - iosSimulatorArm64 → simulator on Apple Silicon Mac (M1/M2/M3)
-  #   - iosX64            → simulator on Intel Mac (x86_64)
+  # NOTE: iosX64 (Intel simulator) is NOT included — Compose Multiplatform 1.11.x
+  # dropped iosX64 support. Intel Mac users must set EXCLUDED_ARCHS in Xcode (see README).
   #
   # iOS team and React Native iOS: download artifact, drag into Xcode → Embed & Sign.
   build-ios:
@@ -78,11 +79,11 @@ jobs:
           echo "── XCFramework contents ──"
           ls -la "$XCFW"
 
-          # Must contain arm64 (device), arm64-simulator (Apple Silicon), x86_64-simulator (Intel)
+          # Must contain arm64 (device) and arm64-simulator (Apple Silicon)
+          # iosX64 (Intel) not included — CMP 1.11.x dropped that target
           for slice in \
             "ios-arm64" \
-            "ios-arm64-simulator" \
-            "ios-x86_64-simulator"; do
+            "ios-arm64-simulator"; do
             if [ -d "$XCFW/$slice" ]; then
               echo "✅  $slice"
             else
@@ -110,7 +111,8 @@ jobs:
           echo "**Slices included:**" >> $GITHUB_STEP_SUMMARY
           echo "- \`ios-arm64\` — physical iPhone/iPad" >> $GITHUB_STEP_SUMMARY
           echo "- \`ios-arm64-simulator\` — Apple Silicon Mac simulator (M1/M2/M3)" >> $GITHUB_STEP_SUMMARY
-          echo "- \`ios-x86_64-simulator\` — Intel Mac simulator" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "> **Intel Mac users:** Add \`EXCLUDED_ARCHS[sdk=iphonesimulator*] = x86_64\` in Xcode build settings to use the ARM64 slice via Rosetta 2." >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "**How to use:**" >> $GITHUB_STEP_SUMMARY
           echo "1. Download \`Shared-XCFramework-${{ github.event.inputs.build_type }}\` from artifacts above" >> $GITHUB_STEP_SUMMARY

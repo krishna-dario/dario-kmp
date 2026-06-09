@@ -24,7 +24,9 @@ kotlin {
     listOf(
         iosArm64(),           // physical iPhone/iPad
         iosSimulatorArm64(),  // simulator on Apple Silicon Mac (M1/M2/M3)
-        iosX64(),             // simulator on Intel Mac (x86_64)
+        // iosX64 intentionally excluded: Compose Multiplatform 1.11.x dropped iosX64 support.
+        // Intel Mac users: set EXCLUDED_ARCHS[sdk=iphonesimulator*] = x86_64 in Xcode build
+        // settings to run the iosSimulatorArm64 slice via Rosetta 2.
     ).forEach { iosTarget ->
         iosTarget.binaries.framework {
             baseName = "Shared"
