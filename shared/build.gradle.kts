@@ -22,8 +22,9 @@ kotlin {
 
     val xcf = XCFramework("Shared")
     listOf(
-        iosArm64(),
-        iosSimulatorArm64()
+        iosArm64(),           // physical iPhone/iPad
+        iosSimulatorArm64(),  // simulator on Apple Silicon Mac (M1/M2/M3)
+        iosX64(),             // simulator on Intel Mac (x86_64)
     ).forEach { iosTarget ->
         iosTarget.binaries.framework {
             baseName = "Shared"

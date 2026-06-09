@@ -1,12 +1,16 @@
 name: Build DarioKMP
 
+# Manual trigger only — no automatic builds on push/PR.
+# iOS XCFramework and Android/RN publish are separate targets.
+# macos-latest = macOS 15, Apple Silicon (M1), 7GB RAM, 3 CPUs.
+
 on:
   workflow_dispatch:
     inputs:
       target:
-        description: "ios → XCFramework | publish → GitHub Packages (Android + RN Android)"
+        description: "ios → XCFramework for iOS/RN-iOS | publish → GitHub Packages for Android/RN-Android"
         required: true
-        default: "publish"
+        default: "ios"
         type: choice
         options:
           - ios
@@ -21,8 +25,13 @@ on:
           - release
 
 jobs:
-  # iOS native + React Native iOS
-  # Download the XCFramework artifact and embed it in Xcode
+  # ─── iOS XCFramework ────────────────────────────────────────────────────────
+  # Builds Shared.xcframework containing 3 slices:
+  #   - iosArm64          → physical iPhone/iPad
+  #   - iosSimulatorArm64 → simulator on Apple Silicon Mac (M1/M2/M3)
+  #   - iosX64            → simulator on Intel Mac (x86_64)
+  #
+  # iOS team and React Native iOS: download artifact, drag into Xcode → Embed & Sign.
   build-ios:
     name: Build iOS XCFramework (${{ github.event.inputs.build_type }})
     if: ${{ github.event.inputs.target == 'ios' }}
@@ -43,13 +52,47 @@ jobs:
       - name: Make gradlew executable
         run: chmod +x gradlew
 
+      # Override gradle.properties Xmx (8192M) — macOS runners only have 7GB.
+      # Cap Kotlin daemon at 6GB; leave 1GB headroom for OS + Xcode toolchain.
       - name: Build XCFramework
+        env:
+          GRADLE_OPTS: "-Dkotlin.daemon.jvmargs=-Xmx6144M -XX:+UseG1GC -XX:MaxMetaspaceSize=512M"
         run: |
           if [ "${{ github.event.inputs.build_type }}" == "release" ]; then
-            ./gradlew :shared:assembleSharedReleaseXCFramework
+            ./gradlew :shared:assembleSharedReleaseXCFramework \
+              -Pkotlin.native.parallelThreads=1 \
+              --no-daemon \
+              --stacktrace
           else
-            ./gradlew :shared:assembleSharedDebugXCFramework
+            ./gradlew :shared:assembleSharedDebugXCFramework \
+              -Pkotlin.native.parallelThreads=1 \
+              --no-daemon \
+              --stacktrace
           fi
+
+      # Verify all 3 slices are present before uploading
+      - name: Verify XCFramework slices
+        run: |
+          XCFW="shared/build/XCFrameworks/${{ github.event.inputs.build_type }}/Shared.xcframework"
+
+          echo "── XCFramework contents ──"
+          ls -la "$XCFW"
+
+          # Must contain arm64 (device), arm64-simulator (Apple Silicon), x86_64-simulator (Intel)
+          for slice in \
+            "ios-arm64" \
+            "ios-arm64-simulator" \
+            "ios-x86_64-simulator"; do
+            if [ -d "$XCFW/$slice" ]; then
+              echo "✅  $slice"
+            else
+              echo "❌  $slice — MISSING"
+              exit 1
+            fi
+          done
+
+          echo ""
+          echo "All 3 slices present. XCFramework is valid."
 
       - name: Upload XCFramework
         uses: actions/upload-artifact@v4
@@ -58,9 +101,27 @@ jobs:
           path: shared/build/XCFrameworks/${{ github.event.inputs.build_type }}/Shared.xcframework
           retention-days: 14
 
-  # Android native + React Native Android
-  # Publishes com.dario.kmp:shared to GitHub Packages
-  # debug → for development/testing, release → for production builds
+      - name: Summary
+        run: |
+          echo "### iOS XCFramework ✅" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Build type:** \`${{ github.event.inputs.build_type }}\`" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Slices included:**" >> $GITHUB_STEP_SUMMARY
+          echo "- \`ios-arm64\` — physical iPhone/iPad" >> $GITHUB_STEP_SUMMARY
+          echo "- \`ios-arm64-simulator\` — Apple Silicon Mac simulator (M1/M2/M3)" >> $GITHUB_STEP_SUMMARY
+          echo "- \`ios-x86_64-simulator\` — Intel Mac simulator" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**How to use:**" >> $GITHUB_STEP_SUMMARY
+          echo "1. Download \`Shared-XCFramework-${{ github.event.inputs.build_type }}\` from artifacts above" >> $GITHUB_STEP_SUMMARY
+          echo "2. Remove old \`Shared.xcframework\` from Xcode project" >> $GITHUB_STEP_SUMMARY
+          echo "3. Drag new \`Shared.xcframework\` into Xcode → set to **Embed & Sign**" >> $GITHUB_STEP_SUMMARY
+          echo "4. Clean build folder (Cmd+Shift+K) and build" >> $GITHUB_STEP_SUMMARY
+
+  # ─── Publish to GitHub Packages ─────────────────────────────────────────────
+  # Android native + React Native Android consume com.dario.kmp:shared via Gradle.
+  # debug → version 1.0.0-debug (development/testing)
+  # release → version 1.0.0 (production)
   publish:
     name: Publish to GitHub Packages (${{ github.event.inputs.build_type }})
     if: ${{ github.event.inputs.target == 'publish' }}
@@ -87,11 +148,28 @@ jobs:
 
       - name: Set version suffix for debug builds
         if: ${{ github.event.inputs.build_type == 'debug' }}
-        run: |
-          sed -i '' 's/^version = .*/version = "1.0.0-debug"/' shared/build.gradle.kts
+        run: sed -i '' 's/^version = .*/version = "1.0.0-debug"/' shared/build.gradle.kts
 
       - name: Publish to GitHub Packages
         env:
+          GRADLE_OPTS: "-Dkotlin.daemon.jvmargs=-Xmx6144M -XX:+UseG1GC -XX:MaxMetaspaceSize=512M"
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GITHUB_ACTOR: ${{ github.actor }}
-        run: ./gradlew :shared:publish
+        run: |
+          ./gradlew :shared:publish \
+            -Pkotlin.native.parallelThreads=1 \
+            --no-daemon \
+            --stacktrace
+
+      - name: Summary
+        run: |
+          VERSION=$(grep '^version = ' shared/build.gradle.kts | sed "s/version = //;s/\"//g")
+          echo "### Published to GitHub Packages ✅" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Coordinates:** \`com.dario.kmp:shared:${VERSION}\`" >> $GITHUB_STEP_SUMMARY
+          echo "**Registry:** \`https://maven.pkg.github.com/krishna-dario/dario-kmp\`" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Consume in Android / React Native Android:**" >> $GITHUB_STEP_SUMMARY
+          echo '```groovy' >> $GITHUB_STEP_SUMMARY
+          echo "implementation 'com.dario.kmp:shared:${VERSION}'" >> $GITHUB_STEP_SUMMARY
+          echo '```' >> $GITHUB_STEP_SUMMARY
