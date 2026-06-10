@@ -1,5 +1,10 @@
 name: Build DarioKMP
 
+run-name: >-
+  ${{ github.event.inputs.target == 'ios'
+      && format('Build iOS Framework ({0}, {1})', github.event.inputs.build_type, github.event.inputs.slice)
+      || format('Publish Android Library ({0})', github.event.inputs.build_type) }}
+
 # Manual trigger only — no automatic builds on push/PR.
 # iOS XCFramework and Android/RN publish are separate targets.
 #
@@ -55,7 +60,7 @@ jobs:
   # dropped iosX64. Intel Mac users: set EXCLUDED_ARCHS[sdk=iphonesimulator*] = x86_64
   # in Xcode build settings to run the ARM64 slice via Rosetta 2.
   build-ios:
-    name: Build iOS XCFramework (${{ github.event.inputs.build_type }} · ${{ github.event.inputs.slice }})
+    name: "Build iOS Framework (${{ github.event.inputs.build_type }}, ${{ github.event.inputs.slice }})"
     if: ${{ github.event.inputs.target == 'ios' }}
     runs-on: macos-latest
 
@@ -207,7 +212,7 @@ jobs:
   # KMP Maven publications (Android AAR + Kotlin/Native klibs) compile cross-platform —
   # no Xcode linker needed. macOS is only required for XCFramework binary linking.
   publish:
-    name: Publish to GitHub Packages (${{ github.event.inputs.build_type }})
+    name: Publish Android Library
     if: ${{ github.event.inputs.target == 'publish' }}
     runs-on: ubuntu-latest
 
