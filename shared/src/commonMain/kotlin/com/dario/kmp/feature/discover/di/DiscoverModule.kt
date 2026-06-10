@@ -16,21 +16,25 @@ import com.dario.kmp.feature.discover.presentation.ItemDetailViewModel
  *
  * Usage:
  * ```kotlin
+ * // Live data from API:
  * val vm = DiscoverModule.provideViewModel(baseUrl = "https://your-cms.example.com/")
+ *
+ * // Always use bundled dummy data (no network call):
+ * val vm = DiscoverModule.provideViewModel(baseUrl = "", skipApiCall = true)
  * ```
  */
 object DiscoverModule {
 
-    fun provideRepository(baseUrl: String): DiscoverRepository {
+    fun provideRepository(baseUrl: String, skipApiCall: Boolean = false): DiscoverRepository {
         val httpClient = createHttpClient(baseUrl)
         val api = DiscoverApi(httpClient)
         val remoteDataSource = DiscoverRemoteDataSource(api)
-        return DiscoverRepositoryImpl(remoteDataSource)
+        return DiscoverRepositoryImpl(remoteDataSource, skipApiCall)
     }
 
-    fun provideGetItemDetailUseCase(baseUrl: String): GetItemDetailUseCase =
-        GetItemDetailUseCase(provideRepository(baseUrl))
+    fun provideGetItemDetailUseCase(baseUrl: String, skipApiCall: Boolean = false): GetItemDetailUseCase =
+        GetItemDetailUseCase(provideRepository(baseUrl, skipApiCall))
 
-    fun provideViewModel(baseUrl: String): ItemDetailViewModel =
-        ItemDetailViewModel(provideGetItemDetailUseCase(baseUrl))
+    fun provideViewModel(baseUrl: String, skipApiCall: Boolean = false): ItemDetailViewModel =
+        ItemDetailViewModel(provideGetItemDetailUseCase(baseUrl, skipApiCall))
 }
