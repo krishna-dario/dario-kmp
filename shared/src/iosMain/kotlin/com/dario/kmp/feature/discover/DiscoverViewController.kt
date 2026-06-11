@@ -35,7 +35,7 @@ fun DiscoverViewController(
     baseUrl: String,
     skipApiCall: Boolean = false,
     onClose: () -> Unit,
-) = ComposeUIViewController {
+) = ComposeUIViewController(configure = { enforceStrictPlistSanityCheck = false }) {
     val itemType = runCatching { ItemType.valueOf(type.uppercase()) }
         .getOrDefault(ItemType.RECIPE)
     val viewModel = DiscoverModule.provideViewModel(baseUrl = baseUrl, skipApiCall = skipApiCall)
