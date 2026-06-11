@@ -1,4 +1,3 @@
-import org.jetbrains.kotlin.gradle.ExperimentalWasmDsl
 import org.jetbrains.kotlin.gradle.dsl.JvmTarget
 import org.jetbrains.kotlin.gradle.plugin.mpp.apple.XCFramework
 
@@ -15,48 +14,28 @@ plugins {
 }
 
 kotlin {
-    // Explicitly apply the default hierarchy so that iosMain, appleMain, nativeMain, etc.
-    // are properly wired to their child targets BEFORE the custom jsAndWasmMain source set
-    // adds its own dependsOn edges (which would otherwise suppress the default template).
     applyDefaultHierarchyTemplate()
 
     val xcf = XCFramework("Shared")
 
-    // Pass -PdeviceOnly on the Gradle command line to build only the iosArm64 slice.
-    // Used by CI when building for physical device / TestFlight / App Store (~30% faster).
-    // Without the flag both slices are built (iosArm64 + iosSimulatorArm64).
-    //
-    // iosX64 intentionally excluded: Compose Multiplatform 1.11.x dropped iosX64 support.
-    // Intel Mac users: set EXCLUDED_ARCHS[sdk=iphonesimulator*] = x86_64 in Xcode build
-    // settings to run the iosSimulatorArm64 slice via Rosetta 2.
-    val deviceOnly = project.hasProperty("deviceOnly")
-
-    buildList {
-        add(iosArm64())                             // physical iPhone/iPad — always included
-        if (!deviceOnly) add(iosSimulatorArm64())   // simulator — skipped when -PdeviceOnly
-    }.forEach { iosTarget ->
+    // iosX64 excluded: Compose Multiplatform 1.7+ dropped iosX64 support.
+    // Intel Mac users must use Rosetta 2 (iosSimulatorArm64 slice).
+    listOf(
+        iosArm64(),
+        iosSimulatorArm64()
+    ).forEach { iosTarget ->
         iosTarget.binaries.framework {
             baseName = "Shared"
-            isStatic = true
-            freeCompilerArgs += listOf("-Xbinary=bundleId=com.dario.kmp.shared")
+            binaryOption("bundleId", "com.dario.kmp.shared")
+            linkerOpts += "-ld64"
             xcf.add(this)
         }
-    }
-    
-    js {
-        browser()
-    }
-    
-    @OptIn(ExperimentalWasmDsl::class)
-    wasmJs {
-        browser()
     }
     
     android {
        namespace = "com.dario.kmp.shared"
        compileSdk = libs.versions.android.compileSdk.get().toInt()
        minSdk = libs.versions.android.minSdk.get().toInt()
-    
        compilerOptions {
            jvmTarget = JvmTarget.JVM_11
        }
@@ -75,14 +54,6 @@ kotlin {
         }
         iosMain.dependencies {
             implementation(libs.ktor.client.darwin)
-        }
-        val jsAndWasmMain by creating {
-            dependsOn(sourceSets.commonMain.get())
-        }
-        jsMain.get().dependsOn(jsAndWasmMain)
-        wasmJsMain.get().dependsOn(jsAndWasmMain)
-        jsAndWasmMain.dependencies {
-            implementation(libs.ktor.client.js)
         }
         commonMain.dependencies {
             implementation(libs.compose.runtime)
@@ -109,9 +80,6 @@ kotlin {
         commonTest.dependencies {
             implementation(libs.kotlin.test)
         }
-        jsMain.dependencies {
-            implementation(libs.wrappers.browser)
-        }
     }
 }
 
@@ -125,6 +93,17 @@ compose.resources {
 
 dependencies {
     androidRuntimeClasspath(libs.compose.uiTooling)
+}
+
+// Force Skiko to the version bundled with Compose Multiplatform 1.11.1.
+// coil3 3.2.0 pulls skiko:0.9.4 which conflicts with CMP's skiko:0.144.6.
+configurations.all {
+    resolutionStrategy.eachDependency {
+        if (requested.group == "org.jetbrains.skiko") {
+            useVersion("0.144.6")
+            because("Align with Compose Multiplatform 1.11.1 bundled Skiko version")
+        }
+    }
 }
 
 publishing {
